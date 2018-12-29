@@ -4,10 +4,20 @@
             [kaocha.repl :as kaocha]))
 
 
+;;
+;; Inject dev helpers:
+;;
+
+
 (inject/inject '[.
                  [aprint.core aprint]
                  [clojure.repl doc source dir]
                  [lucid.core.debug dbg-> dbg->> ->prn ->doto ->>doto]])
+
+
+;;
+;; Reset, start and stop:
+;;
 
 
 (def reset repl/refresh)
