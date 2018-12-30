@@ -1,18 +1,6 @@
 (ns user
   (:require [clojure.tools.namespace.repl :as repl]
-            [lucid.core.inject :as inject]
             [kaocha.repl :as kaocha]))
-
-
-;;
-;; Inject dev helpers:
-;;
-
-
-(inject/inject '[.
-                 [aprint.core aprint]
-                 [clojure.repl doc source dir]
-                 [lucid.core.debug dbg-> dbg->> ->prn ->doto ->>doto]])
 
 
 ;;

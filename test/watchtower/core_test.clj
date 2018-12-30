@@ -44,7 +44,8 @@
 (defn with-watcher [f]
   (let [changes (atom [])
         watcher (w/watcher [(.getAbsolutePath *test-dir*)]
-                  (w/rate 50)
+                  (w/file-filter (fn [^java.io.File file]
+                                   (-> file .getName (str/ends-with? ".txt"))))
                   (w/on-change (fn [changed-files]
                                  (->> changed-files
                                       (map rel-name)
@@ -64,33 +65,56 @@
   with-watcher)
 
 
+; The file watch service implementation in Mac uses polling, and it seems like
+; it takes up to 5 - 8 sec for it to detect changes. On Linux changes are pretty
+; much immediate. For windows, I have no idea.
+
+(def timeout (if (-> (System/getProperty "os.name") (= "Mac OS X"))
+               10000
+               200))
+
+
 ;;
 ;; Tests:
 ;;
 
 
 (deftest init-test
-  (fact {:timeout 200}
+  (fact {:timeout timeout}
     @*changes* => [(just #{"/test.txt" "/dir/tree.txt"})]))
 
 
 (deftest change-file-test
+  (spit (io/file *test-dir* "test.txt") "world!")
+  (fact {:timeout timeout}
+    @*changes* => [(just #{"/test.txt" "/dir/tree.txt"})
+                   (just #{"/test.txt"})]))
+
+
+(deftest change-nested-file-test
   (spit (io/file *test-dir* "dir" "tree.txt") "world!")
-  (fact {:timeout 200}
+  (fact {:timeout timeout}
     @*changes* => [(just #{"/test.txt" "/dir/tree.txt"})
                    (just #{"/dir/tree.txt"})]))
 
 
 (deftest new-file-test
   (spit (io/file *test-dir* "dir" "foo.txt") "bar")
-  (fact {:timeout 200}
+  (fact {:timeout timeout}
     @*changes* => [(just #{"/test.txt" "/dir/tree.txt"})
-                   (just #{"/dir/foo.txt"})]))
+                   (just #{"/dir/foo.txt"})])
+  (println @*changes*))
 
 
 (deftest new-dir-and-file-test
-  (FileUtils/forceMkdir (io/file *test-dir* "dir2/dir3"))
+  ; Yes, we do need to make a pause between creating directories and adding sub-dirs
+  ; or files.
+  (FileUtils/forceMkdir (io/file *test-dir* "dir2"))
+  (Thread/sleep timeout)
+  (FileUtils/forceMkdir (io/file *test-dir* "dir2" "dir3"))
+  (Thread/sleep timeout)
   (spit (io/file *test-dir* "dir2" "dir3" "foo.txt") "bar")
-  (fact {:timeout 200}
+  (Thread/sleep timeout)
+  (fact {:timeout timeout}
     @*changes* => [(just #{"/test.txt" "/dir/tree.txt"})
                    (just #{"/dir2/dir3/foo.txt"})]))
