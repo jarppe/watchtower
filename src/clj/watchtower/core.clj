@@ -163,14 +163,14 @@
 
 (defn ignore-dotfiles
   "A file-filter that removes any file that starts with a dot."
-  [f]
+  [^java.io.File f]
   (not= \. (first (.getName f))))
 
 (defn extensions
   "Create a file-filter for the given extensions."
   [& exts]
   (let [exts-set (set (map name exts))]
-    (fn [f]
+    (fn [^java.io.File f]
       (let [fname (.getName f)
             idx   (.lastIndexOf fname ".")
             cur   (if-not (neg? idx) (subs fname (inc idx)))]
