@@ -3,9 +3,9 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>jarppe</groupId>
   <artifactId>watchtower</artifactId>
-  <version>0.0.2</version>
+  <version>0.0.3</version>
   <name>watchtower</name>
-  <url>https://github.com/metosin/eines</url>
+  <url>https://github.com/jarppe/watchtower</url>
   <licenses>
     <license>
       <name>Eclipse Public License</name>
