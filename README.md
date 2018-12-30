@@ -14,6 +14,8 @@ the dependency to `ibdknox/watchtower` with `jarppe/watchtower`.
 
 The status of this is pretty much alpha for now.
 
+[![Clojars Project](https://img.shields.io/clojars/v/jarppe/watchtower.svg)](https://clojars.org/jarppe/watchtower)
+
 ## Usage
 
 ```clojure

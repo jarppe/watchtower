@@ -2,18 +2,24 @@
  :deps    {io.methvin/directory-watcher {:mvn/version "0.9.3"}
            org.clojure/core.async       {:mvn/version "0.4.490"}}
 
- :aliases {:dev   {:extra-paths ["src/dev"]
-                   :extra-deps  {org.clojure/clojure         {:mvn/version "1.10.0"}
-                                 org.clojure/tools.namespace {:mvn/version "0.2.11"}
-                                 org.slf4j/slf4j-nop         {:mvn/version "1.7.25"}}}
+ :aliases {:dev    {:extra-paths ["src/dev"]
+                    :extra-deps  {org.clojure/clojure         {:mvn/version "1.10.0"}
+                                  org.clojure/tools.namespace {:mvn/version "0.2.11"}
+                                  org.slf4j/slf4j-nop         {:mvn/version "1.7.25"}}}
 
-           :nrepl {:extra-deps {nrepl/nrepl {:mvn/version "0.5.3"}}}
+           :nrepl  {:extra-deps {nrepl/nrepl {:mvn/version "0.5.3"}}}
 
-           :test  {:extra-deps  {lambdaisland/kaocha {:mvn/version "0.0-305"}
-                                 metosin/testit      {:mvn/version "0.4.0-SNAPSHOT"}
-                                 commons-io          {:mvn/version "2.6"}}
-                   :extra-paths ["test"]}
+           :test   {:extra-deps  {lambdaisland/kaocha {:mvn/version "0.0-305"}
+                                  metosin/testit      {:mvn/version "0.4.0-SNAPSHOT"}
+                                  commons-io          {:mvn/version "2.6"}}
+                    :extra-paths ["test"]}
 
-           :pack  {:extra-deps {pack/pack.alpha {:git/url "https://github.com/juxt/pack.alpha.git"
-                                                 :sha     "24863d1ff5a54bb7cc783ff62272212b51c8b316"}}
-                   :main-opts  ["-m"]}}}
+           :pack   {:extra-deps {pack/pack.alpha {:git/url "https://github.com/juxt/pack.alpha.git"
+                                                  :sha     "24863d1ff5a54bb7cc783ff62272212b51c8b316"}}
+                    :main-opts  ["-m"]}
+
+           :jar    {:extra-deps {luchiniatwork/cambada {:mvn/version "1.0.0"}}
+                    :main-opts ["-m" "cambada.jar"]}
+
+           :deploy {:extra-deps {deps-deploy {:mvn/version "0.0.9"}}
+                    :main-opts  ["-m" "deps-deploy.deps-deploy" "deploy" "target/watchtower.jar"]}}}
