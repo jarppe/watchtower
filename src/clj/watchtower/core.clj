@@ -1,77 +1,86 @@
 (ns watchtower.core
-  (:import (java.nio.file Path
-                          Paths
-                          Files
-                          FileSystems
-                          FileVisitResult
-                          SimpleFileVisitor
-                          WatchEvent
-                          WatchEvent$Kind
-                          StandardWatchEventKinds
-                          ClosedWatchServiceException
-                          LinkOption)))
+  (:require [clojure.core.async :as a :refer [<! >! go go-loop]])
+  (:import (java.io File)
+           (java.nio.file Path Paths)
+           (io.methvin.watcher DirectoryWatcher DirectoryChangeListener)
+           (io.methvin.watcher.hashing FileHasher)))
 
-;;
-;; Java interop helpers:
-;;
 
 (set! *warn-on-reflection* true)
 
 
-(def ^:private empty-string-array (into-array String []))
-(def ^:private empty-link-options (into-array LinkOption []))
-(def ^:private watch-events (into-array WatchEvent$Kind [StandardWatchEventKinds/ENTRY_CREATE
-                                                         StandardWatchEventKinds/ENTRY_MODIFY
-                                                         StandardWatchEventKinds/ENTRY_DELETE]))
+(defn- ->path ^Path [v]
+  (cond
+    (instance? Path v) v
+    (instance? File v) (.toPath ^File v)
+    (string? v) (Paths/get v (into-array String []))
+    :else (throw (ex-info (str "don't know how to coerce to path from: " v) {}))))
 
 
-(defn- dir? [^Path path]
-  (Files/isDirectory path empty-link-options))
+(def ^:private change-type->FileHasher
+  {:file-hash     FileHasher/DEFAULT_FILE_HASHER
+   :last-modified FileHasher/LAST_MODIFIED_TIME})
 
 
-(defn- str->path ^Path [path-name]
-  (let [path (Paths/get path-name empty-string-array)]
-    (when-not (dir? path)
-      (throw (ex-info (str "can't watch path: " path) {:path path})))
-    path))
+(defn- ->listener ^DirectoryChangeListener [on-change-ch]
+  (reify DirectoryChangeListener
+    (onEvent [_ event]
+      (a/>!! on-change-ch (-> event .path .toFile)))))
 
 
-(defn- init-watch-paths! [paths add-watch-path! match? changed]
-  (let [init-files   (atom #{})
-        file-visitor (proxy [SimpleFileVisitor] []
-                       (preVisitDirectory [path _attrs]
-                         (add-watch-path! path)
-                         FileVisitResult/CONTINUE)
-                       (visitFile [^Path path _attrs]
-                         (let [file (-> path .toFile)]
-                           (when (match? file)
-                             (swap! init-files conj file)))
-                         FileVisitResult/CONTINUE))]
-    (doseq [path paths]
-      (Files/walkFileTree path file-visitor))
-    (let [files @init-files]
-      (when-not (empty? files)
-        (changed files)))))
+(defn- make-watcher ^DirectoryWatcher [paths change-type on-change-ch]
+  (doto (-> (DirectoryWatcher/builder)
+            (.paths (mapv ->path paths))
+            (.listener (->listener on-change-ch))
+            (.fileHasher (change-type->FileHasher change-type))
+            (.build))
+    (.watchAsync)))
+
+(defn- debounce [in timeout-ms]
+  (let [out (a/chan)]
+    (go-loop [acc nil]
+      (let [val   (if (nil? acc)
+                    [(<! in)]
+                    acc)
+            timer (a/timeout timeout-ms)
+            [new-val ch] (a/alts! [in timer])]
+        (condp = ch
+          timer (do (>! out val)
+                    (recur nil))
+          in (if new-val
+               (recur (conj val new-val))
+               (a/close! out)))))
+    out))
+
+
+(defn- watcher-ch [{:keys [paths file-filter change-type debounce-ms]
+                   :or   {change-type :last-modified
+                          debounce-ms 10}}]
+  {:pre [(->> paths (every? #(instance? Path %)))
+         (-> change-type (change-type->FileHasher))
+         (-> file-filter (ifn?))
+         (-> debounce-ms (integer?))]}
+  (let [on-change-ch (a/chan 16 (filter file-filter))
+        watcher      (make-watcher paths change-type on-change-ch)
+        on-change-ch (debounce on-change-ch debounce-ms)
+        on-close-ch  (a/chan)]
+    (go (<! on-close-ch)
+        (a/close! on-change-ch)
+        (.close watcher))
+    [on-change-ch on-close-ch]))
 
 
 ;;*****************************************************
 ;; Watcher map creation 
 ;;*****************************************************
 
-(defn watcher*
-  "Create a watcher map that can later be passed to (watch)"
-  [dirs]
-  (let [dirs (if (string? dirs)
-               [dirs]
-               dirs)]
-    {:dirs    dirs
-     :filters []}))
 
 (defn file-filter
   "Add a filter to a watcher. A filter is just a function that takes in a
   java.io.File and returns truthy about whether or not it should be included."
   [w filt]
   (update-in w [:filters] conj filt))
+
 
 (defn rate
   "Set the rate of polling.
@@ -80,71 +89,45 @@
   (println "depreciated, rate has no meaning in this version")
   w)
 
+
 (defn on-change
   "When files are changed, execute a function that takes in a seq of the changed
   file objects."
   [w func]
   (update-in w [:on-change] conj func))
 
+
 ;;*****************************************************
 ;; Watcher execution  
 ;;*****************************************************
 
-(defn changed-fn [funcs]
+
+(defn watcher* [dirs]
+  {:dirs (if (coll? dirs)
+           dirs
+           [dirs])})
+
+
+(defn- changed-fn [funcs]
   (fn [files]
     (doseq [f funcs]
       (f files))))
 
-(defn- compile-watcher [{:keys [filters dirs on-change]}]
-  {:dirs    (mapv str->path dirs)
-   :match?  (fn [file] (every? #(% file) filters))
-   :changed (changed-fn on-change)})
 
 (defn watch
   "Execute a watcher map"
-  [w]
-  (let [{:keys [dirs match? changed]} (compile-watcher w)
-        watcher-service (-> (FileSystems/getDefault)
-                            (.newWatchService))
-        watch-paths     (atom {})
-        add-watch-path! (fn [path]
-                          (let [watch-key (.register ^Path path watcher-service watch-events)]
-                            (swap! watch-paths assoc watch-key path)))]
-    ; Register watcher for given paths:
-    (init-watch-paths! dirs add-watch-path! match? changed)
-    ; Enter to a loop for polling and handling of file change events:
-    (try
-      (while true
-        (let [key        (.take watcher-service)
-              ; This small sleep allow aggregating multiple events into a one report. Without
-              ; this we would get separate notifications for file content change and file atime
-              ; change.
-              events     (do (Thread/sleep 20)
-                             (.pollEvents key))
-              watch-path (get @watch-paths key)]
-          (some->> events
-                   ; Map event to a java.io.File, if the event is for creation of a new directory,
-                   ; register a watch for that directory too:
-                   (map (fn [^WatchEvent event]
-                          (let [^Path context (-> event .context)
-                                ^Path path    (.resolve ^Path watch-path context)]
-                            (when (and (-> event .kind (= StandardWatchEventKinds/ENTRY_CREATE))
-                                       (-> path dir?))
-                              (add-watch-path! path))
-                            (-> path .toFile))))
-                   (filter match?)
-                   (seq)
-                   (set)
-                   (changed))
-          (.reset key)))
-      (catch InterruptedException _expected
-        (try
-          (.close watcher-service)
-          (catch Exception e
-            (.println System/err "unexpected error while closing watch-service")
-            (.println System/err e)
-            (.printStackTrace e))))
-      (catch ClosedWatchServiceException _expected))))
+  [{:keys [filters dirs on-change]}]
+  (let [changed (changed-fn on-change)
+        opts    {:paths       (mapv ->path dirs)
+                 :file-filter (fn [file] (every? #(% file) filters))}
+        [on-change-ch on-close-ch] (watcher-ch opts)]
+    (go-loop []
+      (when-let [v (<! on-change-ch)]
+        (changed v)
+        (recur)))
+    (fn []
+      (a/close! on-close-ch))))
+
 
 (defmacro watcher
   "Create a watcher for the given dirs (either a string or coll of strings), applying
@@ -155,16 +138,19 @@
   `(let [w# (-> ~dirs
                 (watcher*)
                 ~@body)]
-     (future (watch w#))))
+     (watch w#)))
+
 
 ;;*****************************************************
 ;; file filters
 ;;*****************************************************
 
+
 (defn ignore-dotfiles
   "A file-filter that removes any file that starts with a dot."
   [^java.io.File f]
   (not= \. (first (.getName f))))
+
 
 (defn extensions
   "Create a file-filter for the given extensions."

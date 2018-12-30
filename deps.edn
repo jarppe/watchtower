@@ -1,8 +1,11 @@
 {:paths   ["src/clj"]
- :deps    {org.clojure/clojure {:mvn/version "1.10.0"}}
+ :deps    {io.methvin/directory-watcher {:mvn/version "0.9.3"}
+           org.clojure/core.async       {:mvn/version "0.4.490"}}
 
  :aliases {:dev   {:extra-paths ["src/dev"]
-                   :extra-deps  {org.clojure/tools.namespace {:mvn/version "0.2.11"}}}
+                   :extra-deps  {org.clojure/clojure         {:mvn/version "1.10.0"}
+                                 org.clojure/tools.namespace {:mvn/version "0.2.11"}
+                                 org.slf4j/slf4j-nop         {:mvn/version "1.7.25"}}}
 
            :nrepl {:extra-deps {nrepl/nrepl {:mvn/version "0.5.3"}}}
 
@@ -14,4 +17,3 @@
            :pack  {:extra-deps {pack/pack.alpha {:git/url "https://github.com/juxt/pack.alpha.git"
                                                  :sha     "24863d1ff5a54bb7cc783ff62272212b51c8b316"}}
                    :main-opts  ["-m"]}}}
-
