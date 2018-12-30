@@ -29,6 +29,9 @@ This causes following changes:
 1. This version required JDK 7 or later
 2. This version can be much faster on some systems
 3. This version can be much slower on some systems
+4. Using [clojure tools-deps](https://clojure.org/guides/getting_started) instead of [Leiningen](https://leiningen.org/)
+
+This version also has some tests for public API and adds some annotations to avoid reflection.
 
 On systems where the WatchService in your JDK is implemented using file system level hooks, this version
 can be much faster and require much less CPU, especially on large projects with lots of files to watch. 
@@ -40,30 +43,28 @@ seems to be pretty slow (around 5 - 8 seconds). Mac's are this kind of systems.
 
 As for Windows, I have no idea at this time.
 
-If you're on Mac you propably should keep on using original watchtower.
+If you're on Mac you probably should keep on using original watchtower.
 
 ## Testing
-
-This version also has some tests. 
 
 ```bash
 clojure -A:test -m kaocha.runner
 ```
 
-You can run them in Mac too, but that's pretty slow (see above). How ever, if you
-run your repl on docker container you can enjoy the speed of Linux implementation of the WatchService.
+You can run them in Mac too, but that's pretty slow (see above). How ever, if you run your tests on docker container
+you can enjoy the magnificent speed of Linux implementation of the WatchService.
 
 ```bash
 docker run --rm -v ~/.m2:/root/.m2 -v $(pwd):/watchtower -w /watchtower clojure:openjdk-11-tools-deps clojure -A:test -m kaocha.runner
 ```
 
-You can have a repl in docker container too, here's an example that binds nrepl to localhost:6000:
+You can run the nrepl in docker container too, here's an example that binds nrepl to localhost:6000:
 
 ```bash
 docker run --rm -v ~/.m2:/root/.m2 -v $(pwd):/watchtower -w /watchtower -p 6000:6000 clojure:openjdk-11-tools-deps clojure -R:dev:test:nrepl -m nrepl.cmdline -b 0.0.0.0 -p 6000
 ```
  
-Instruct your favourite IDE to open an nrepl client at localhost:6000 and hack on. The tests can be run in repl by 
+Instruct your favourite IDE to open an nrepl client to localhost:6000 and hack on. The tests can be run in repl by 
 calling:
 
 ```clj
