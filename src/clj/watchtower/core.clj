@@ -25,7 +25,7 @@
                                                          StandardWatchEventKinds/ENTRY_DELETE]))
 
 
-(defn dir? [^Path path]
+(defn- dir? [^Path path]
   (Files/isDirectory path empty-link-options))
 
 
@@ -36,7 +36,7 @@
     path))
 
 
-(defn init-watch-paths! [paths add-watch-path! match? changed]
+(defn- init-watch-paths! [paths add-watch-path! match? changed]
   (let [init-files   (atom #{})
         file-visitor (proxy [SimpleFileVisitor] []
                        (preVisitDirectory [path _attrs]
@@ -95,7 +95,7 @@
     (doseq [f funcs]
       (f files))))
 
-(defn compile-watcher [{:keys [filters dirs on-change]}]
+(defn- compile-watcher [{:keys [filters dirs on-change]}]
   {:dirs    (mapv str->path dirs)
    :match?  (fn [file] (every? #(% file) filters))
    :changed (changed-fn on-change)})
@@ -175,4 +175,3 @@
             idx   (.lastIndexOf fname ".")
             cur   (if-not (neg? idx) (subs fname (inc idx)))]
         (exts-set cur)))))
-
