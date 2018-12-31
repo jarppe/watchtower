@@ -1,73 +1,8 @@
 (ns watchtower.core
-  (:require [clojure.core.async :as a :refer [<! >! go go-loop]])
-  (:import (java.io File)
-           (java.nio.file Path Paths)
-           (io.methvin.watcher DirectoryWatcher DirectoryChangeListener)
-           (io.methvin.watcher.hashing FileHasher)))
+  (:require [hawk.core :as hawk]))
 
 
 (set! *warn-on-reflection* true)
-
-
-(defn- ->path ^Path [v]
-  (cond
-    (instance? Path v) v
-    (instance? File v) (.toPath ^File v)
-    (string? v) (Paths/get v (into-array String []))
-    :else (throw (ex-info (str "don't know how to coerce to path from: " v) {}))))
-
-
-(def ^:private change-type->FileHasher
-  {:file-hash     FileHasher/DEFAULT_FILE_HASHER
-   :last-modified FileHasher/LAST_MODIFIED_TIME})
-
-
-(defn- ->listener ^DirectoryChangeListener [on-change-ch]
-  (reify DirectoryChangeListener
-    (onEvent [_ event]
-      (a/>!! on-change-ch (-> event .path .toFile)))))
-
-
-(defn- make-watcher ^DirectoryWatcher [paths change-type on-change-ch]
-  (doto (-> (DirectoryWatcher/builder)
-            (.paths (mapv ->path paths))
-            (.listener (->listener on-change-ch))
-            (.fileHasher (change-type->FileHasher change-type))
-            (.build))
-    (.watchAsync)))
-
-(defn- debounce [in timeout-ms]
-  (let [out (a/chan)]
-    (go-loop [acc nil]
-      (let [val   (if (nil? acc)
-                    [(<! in)]
-                    acc)
-            timer (a/timeout timeout-ms)
-            [new-val ch] (a/alts! [in timer])]
-        (condp = ch
-          timer (do (>! out val)
-                    (recur nil))
-          in (if new-val
-               (recur (conj val new-val))
-               (a/close! out)))))
-    out))
-
-
-(defn- watcher-ch [{:keys [paths file-filter change-type debounce-ms]
-                   :or   {change-type :last-modified
-                          debounce-ms 10}}]
-  {:pre [(->> paths (every? #(instance? Path %)))
-         (-> change-type (change-type->FileHasher))
-         (-> file-filter (ifn?))
-         (-> debounce-ms (integer?))]}
-  (let [on-change-ch (a/chan 16 (filter file-filter))
-        watcher      (make-watcher paths change-type on-change-ch)
-        on-change-ch (debounce on-change-ch debounce-ms)
-        on-close-ch  (a/chan)]
-    (go (<! on-close-ch)
-        (a/close! on-change-ch)
-        (.close watcher))
-    [on-change-ch on-close-ch]))
 
 
 ;;*****************************************************
@@ -109,24 +44,18 @@
 
 
 (defn- changed-fn [funcs]
-  (fn [files]
+  (fn [_ {:keys [file]}]
     (doseq [f funcs]
-      (f files))))
+      (f [file]))
+    nil))
 
 
 (defn watch
   "Execute a watcher map"
   [{:keys [filters dirs on-change]}]
-  (let [changed (changed-fn on-change)
-        opts    {:paths       (mapv ->path dirs)
-                 :file-filter (fn [file] (every? #(% file) filters))}
-        [on-change-ch on-close-ch] (watcher-ch opts)]
-    (go-loop []
-      (when-let [v (<! on-change-ch)]
-        (changed v)
-        (recur)))
-    (fn []
-      (a/close! on-close-ch))))
+  (hawk/watch! [{:paths dirs
+                 :filter (fn [_ {:keys [file]}] (every? #(% file) filters))
+                 :handler (changed-fn on-change)}]))
 
 
 (defmacro watcher
@@ -139,6 +68,10 @@
                 (watcher*)
                 ~@body)]
      (watch w#)))
+
+
+(defn stop! [watcher]
+  (hawk/stop! watcher))
 
 
 ;;*****************************************************

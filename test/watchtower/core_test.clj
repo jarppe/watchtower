@@ -12,7 +12,7 @@
 ;;
 
 
-(def ^java.io.File test-dir (doto (io/file "./target/core-test")
+(def ^java.io.File test-dir (doto (io/file "target/core-test")
                               (FileUtils/forceMkdir)
                               (FileUtils/cleanDirectory)))
 
@@ -30,22 +30,21 @@
     (subs file-path (count test-path))))
 
 
-(def changes (atom []))
+(def changes (atom #{}))
 
 
 (defn with-watcher [f]
-  (reset! changes [])
-  (let [close-watcher (w/watcher [(.getAbsolutePath test-dir)]
-                        (w/file-filter (w/extensions :txt))
-                        (w/on-change (fn [changed-files]
-                                       (->> changed-files
-                                            (map rel-name)
-                                            (set)
-                                            (swap! changes conj)))))]
+  (reset! changes #{})
+  (let [watcher (w/watcher [(.getAbsolutePath test-dir)]
+                  (w/file-filter (w/extensions :txt))
+                  (w/on-change (fn [changed-files]
+                                 (->> changed-files
+                                      (map rel-name)
+                                      (swap! changes into)))))]
     (try
       (f)
       (finally
-        (close-watcher)))))
+        (w/stop! watcher)))))
 
 
 (use-fixtures :each
@@ -69,36 +68,35 @@
 (deftest change-file-test
   (spit (io/file test-dir "test.txt") "world!")
   (fact {:timeout timeout}
-    @changes => [(just #{"/test.txt"})]))
+    @changes => (just #{"/test.txt"})))
 
 
 (deftest change-nested-file-test
   (FileUtils/forceMkdir (io/file test-dir "dir"))
   (spit (io/file test-dir "dir" "tree.txt") "world!")
   (fact {:timeout timeout}
-    @changes => [(just #{"/dir/tree.txt"})]))
+    @changes => (just #{"/dir/tree.txt"})))
 
 
 (deftest new-file-test
   (FileUtils/forceMkdir (io/file test-dir "dir"))
   (spit (io/file test-dir "dir" "foo.txt") "bar")
   (fact {:timeout timeout}
-    @changes => [(just #{"/dir/foo.txt"})]))
+    @changes => (just #{"/dir/foo.txt"})))
 
 
 (deftest new-files-test
   (spit (io/file test-dir "foo.txt") "bar")
   (spit (io/file test-dir "bar.txt") "bar")
-  (Thread/sleep 50) ; Make sure we get to batches via debounce
   (spit (io/file test-dir "boz.txt") "bar")
   (spit (io/file test-dir "not-this.xyz") "bar")
   (fact {:timeout timeout}
-    @changes => [(just #{"/foo.txt" "/bar.txt"})
-                   (just #{"/boz.txt"})]))
+    @changes => (just #{"/foo.txt" "/bar.txt" "/boz.txt"}))
+  (prn @changes))
 
 
 (deftest new-dir-and-file-test
   (FileUtils/forceMkdir (io/file test-dir "dir2" "dir3"))
   (spit (io/file test-dir "dir2" "dir3" "foo.txt") "bar")
   (fact {:timeout timeout}
-    @changes => [(just #{"/dir2/dir3/foo.txt"})]))
+    @changes => (just #{"/dir2/dir3/foo.txt"})))

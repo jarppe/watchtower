@@ -1,6 +1,5 @@
 {:paths   ["src/clj"]
- :deps    {io.methvin/directory-watcher {:mvn/version "0.9.3"}
-           org.clojure/core.async       {:mvn/version "0.4.490"}}
+ :deps    {hawk {:mvn/version "0.2.11"}}
 
  :aliases {:dev    {:extra-paths ["src/dev"]
                     :extra-deps  {org.clojure/clojure         {:mvn/version "1.10.0"}
@@ -19,7 +18,7 @@
                     :main-opts  ["-m"]}
 
            :jar    {:extra-deps {luchiniatwork/cambada {:mvn/version "1.0.0"}}
-                    :main-opts ["-m" "cambada.jar"]}
+                    :main-opts  ["-m" "cambada.jar"]}
 
            :deploy {:extra-deps {deps-deploy {:mvn/version "0.0.9"}}
                     :main-opts  ["-m" "deps-deploy.deps-deploy" "deploy" "target/watchtower.jar"]}}}
