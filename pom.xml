@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>jarppe</groupId>
   <artifactId>watchtower</artifactId>
-  <version>0.0.3</version>
+  <version>0.0.4</version>
   <name>watchtower</name>
   <url>https://github.com/jarppe/watchtower</url>
   <licenses>
@@ -19,14 +19,9 @@
   </scm>
   <dependencies>
     <dependency>
-      <groupId>io.methvin</groupId>
-      <artifactId>directory-watcher</artifactId>
-      <version>0.9.3</version>
-    </dependency>
-    <dependency>
-      <groupId>org.clojure</groupId>
-      <artifactId>core.async</artifactId>
-      <version>0.4.490</version>
+      <groupId>hawk</groupId>
+      <artifactId>hawk</artifactId>
+      <version>0.2.11</version>
     </dependency>
   </dependencies>
   <build>
